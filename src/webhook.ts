@@ -1,5 +1,10 @@
 import Fastify from 'fastify';
-import { EmitterWebhookEventName, Webhooks } from '@octokit/webhooks';
+import { Webhooks } from '@octokit/webhooks';
+import {
+  WebhookEventName,
+  IssuesEvent,
+  PullRequestEvent,
+} from '@octokit/webhooks-types';
 import {
   blockUser,
   closeIssue,
@@ -13,7 +18,7 @@ const webhook = new Webhooks({
 });
 
 webhook.on('issues', async ({ payload }) => {
-  const { issue } = payload;
+  const { issue } = payload as IssuesEvent;
   const repo = {
     owner: payload.repository.owner.login,
     repo: payload.repository.name,
@@ -35,7 +40,7 @@ webhook.on('issues', async ({ payload }) => {
     if (!versionCodeLine?.includes(ver)) {
       const msg =
         'Invalid bug report, automatically closed.\n' +
-        `Please report issues using the latest canary Magisk version (version code: ${ver}).`;
+        `Please report issues using the latest debug Magisk build (version code: ${ver}).`;
       await Promise.all([
         commentIssue(repo, issue, msg),
         closeIssue(repo, issue),
@@ -45,7 +50,7 @@ webhook.on('issues', async ({ payload }) => {
 });
 
 webhook.on('pull_request', async ({ payload }) => {
-  const pr = payload.pull_request;
+  const { pull_request: pr } = payload as PullRequestEvent;
   if (pr.labels.some((l) => l.name === 'spam')) {
     await blockUser(pr.user.login);
     if (pr.state !== 'closed') {
@@ -63,14 +68,14 @@ const server = Fastify();
 server.post('/webhook', async (req, res) => {
   await webhook.verifyAndReceive({
     id: req.headers['x-github-delivery'] as string,
-    name: req.headers['x-github-event'] as EmitterWebhookEventName,
-    payload: req.body as any,
+    name: req.headers['x-github-event'] as WebhookEventName,
+    payload: JSON.stringify(req.body),
     signature: req.headers['x-hub-signature-256'] as string,
   });
   res.send();
 });
 
-server.post('/ping', (_, res) => {
+server.get('/ping', (_, res) => {
   res.send();
 });
 
